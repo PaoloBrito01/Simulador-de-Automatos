@@ -1,0 +1,30 @@
+{
+    "nome": "Banana",
+    "estados": {
+        "S0": {
+            "final": false,
+            "transicoes": {
+                "0": "S1",
+                "1": "S0"
+            }
+        },
+        "S1": {
+            "final": false,
+            "transicoes": {
+                "0": "S2",
+                "1": "S1"
+            }
+        },
+        "S2": {
+            "final": false,
+            "transicoes": {
+                "0": "S3",
+                "1": "S2"
+            }
+        },
+        "S3": {
+            "final": true,
+            "transicoes": {}
+        }
+    }
+}
