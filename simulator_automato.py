@@ -20,6 +20,12 @@ class Automato:
         self.estados = {}
         self.estado_inicial = None
 
+    def definir_estado_inicial(self, nome):
+        if nome in self.estados:
+            self.estado_inicial = self.estados[nome]
+        else:
+            raise ValueError(f"Estado inicial '{nome}' não existe no automato.")
+        
     def adicionar_estado(self, nome, final=False):
         estado = Estado(nome, final)
         self.estados[nome] = estado
@@ -38,39 +44,79 @@ class Automato:
             if simbolo in estado_atual.transicoes:
                 estado_atual = estado_atual.transicoes[simbolo]
             else:
-                return False  # Cadeia rejeitada
-        return estado_atual.final  # Aceitar ou rejeitar baseado no estado final
-
+                # Cadeia rejeitada
+                return False  
+                # Aceitar ou rejeitar baseado no estado final
+        return estado_atual.final  
+    
+    # Formatação requisitada do arquivo txt
     def salvar(self, caminho):
-        dados = {
-            'nome': self.nome,
-            'estados': {}
-        }
-        for estado in self.estados.values():
-            dados['estados'][estado.nome] = {
-                'final': estado.final,
-                'transicoes': {simbolo: destino.nome for simbolo, destino in estado.transicoes.items()}
-            }
         with open(caminho, 'w') as f:
-            json.dump(dados, f, indent=4)
+            # Escrevendo estados
+            f.write("#states\n")
+            for estado in self.estados.values():
+                f.write(f"{estado.nome}\n")
+            # Escrevendo estado inicial
+            f.write("#initial\n")
+            f.write(f"{self.estado_inicial.nome}\n")
+            # Escrevendo estados de aceitação
+            f.write("#accepting\n")
+            for estado in self.estados.values():
+                if estado.final:
+                    f.write(f"{estado.nome}\n")
+            # Escrevendo alfabeto (obtendo a partir das transições)
+            f.write("#alphabet\n")
+            alfabeto = set(simbolo for estado in self.estados.values() for simbolo in estado.transicoes.keys())
+            for simbolo in sorted(alfabeto):
+                f.write(f"{simbolo}\n")
+            # Escrevendo transições
+            f.write("#transitions\n")
+            for estado in self.estados.values():
+                for simbolo, destino in estado.transicoes.items():
+                    f.write(f"{estado.nome}:{simbolo}>{destino.nome}\n")
 
     @classmethod
     def carregar(cls, caminho):
+        if not caminho.endswith('.txt'):
+            raise ValueError("O arquivo deve estar no formato .txt.")
+    
         with open(caminho, 'r') as f:
-            dados = json.load(f)
-            automato = cls(dados['nome'])
-            for nome, info in dados['estados'].items():
-                automato.adicionar_estado(nome, info['final'])
-            for nome, info in dados['estados'].items():
-                for simbolo, destino in info['transicoes'].items():
-                    automato.adicionar_transicao(nome, simbolo, destino)
-            return automato
+            linhas = f.readlines()
+            
+        automato = None
+        secao = None
+        for linha in linhas:
+            linha = linha.strip()
+            
+            # Mudança de seção
+            if linha.startswith("#"):
+                secao = linha
+                continue
+            
+            # Processando seções
+            if secao == "#states":
+                if automato is None:
+                    automato = cls("AutomatoCarregado")
+                automato.adicionar_estado(linha, final=False)
+            
+            elif secao == "#initial":
+                automato.definir_estado_inicial(linha)
+            
+            elif secao == "#accepting":
+                automato.estados[linha].final = True
+            
+            elif secao == "#alphabet":
+                pass  # Alfabeto não precisa ser armazenado explicitamente.
+            
+            elif secao == "#transitions":
+                origem, resto = linha.split(":")
+                simbolo, destino = resto.split(">")
+                automato.adicionar_transicao(origem, simbolo, destino)
+        return automato
 
     def gerar_grafo(self, caminho_imagem):
-        # Remove a extensão, pois graphviz vai adicionar automaticamente
         caminho_imagem_sem_extensao = os.path.splitext(caminho_imagem)[0]
         caminho_imagem_completo = os.path.abspath(caminho_imagem_sem_extensao)
-        
         dot = graphviz.Digraph(format='png')
         dot.attr('node', shape='circle')
 
@@ -88,10 +134,8 @@ class Automato:
         if self.estado_inicial:
             dot.node('', shape='none', label='')
             dot.edge('', self.estado_inicial.nome)
-
-        # Renderizar o gráfico
+        # Cria grafico
         dot.render(caminho_imagem_completo, cleanup=True)
-        
         # Verificar se a imagem foi criada com sucesso
         caminho_imagem_final = caminho_imagem_completo + '.png'
         if not os.path.exists(caminho_imagem_final):
@@ -108,11 +152,11 @@ class Automato:
             else:
                 # Caso cadeia rejeitada
                 return False, self.passos 
-        return estado_atual.final, self.passos  # Aceitar ou rejeitar baseado no estado final
+                # Aceitar ou rejeitar baseado no estado final
+        return estado_atual.final, self.passos 
 
 
-
-# Classe para a interface gráfica com PyQt5
+# Classe interface gráfica com PyQt5
 class App(QtWidgets.QWidget):
     def __init__(self):
         super().__init__()
@@ -286,10 +330,14 @@ class App(QtWidgets.QWidget):
             self.resultado_label.setText("Crie ou carregue um automato primeiro.")
 
     def carregar_automato(self):
-        caminho, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Carregar Automato", "", "JSON Files (*.json)")
+        caminho, _ = QtWidgets.QFileDialog.getOpenFileName(self, "Carregar Automato", "", "Text Files (*.txt)")
         if caminho:
-            self.automato = Automato.carregar(caminho)
-            self.resultado_label.setText(f"Automato '{self.automato.nome}' carregado com sucesso!")
+            try:
+                self.automato = Automato.carregar(caminho)
+                self.resultado_label.setText(f"Automato '{self.automato.nome}' carregado com sucesso!")
+            except Exception as e:
+                self.resultado_label.setText(f"Erro ao carregar o automato: {str(e)}")
+
 
     def exibir_grafo(self):
         if self.automato:
@@ -312,8 +360,6 @@ class App(QtWidgets.QWidget):
                 self.resultado_label.setText(f"Erro: {str(e)}")
         else:
             self.resultado_label.setText("Crie ou carregue um automato primeiro.")
-
-
 
 if __name__ == '__main__':
     app = QtWidgets.QApplication(sys.argv)
