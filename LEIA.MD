@@ -23,8 +23,7 @@ chmod +x ./install.sh
 python3 run.py
 ```
 
-### Onde encontrar os autômatos salvos 
--   Todos os arquivos de grafos estão na pasta Simulador_Automatos.
+### Onde encontrar os autômatos salvos:
 -   Arquivos com autômatos pré-definidos estão dentro da pasta `./Simulador_Automatos/prontos`
 
 
