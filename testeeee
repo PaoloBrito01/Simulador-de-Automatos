@@ -9,58 +9,85 @@ class Automato:
     def __init__(self):
         self.estados = set()
         self.transicoes = {}
-        self.estado_atual = None
+        self.estados_ativos = set()  # Usado para armazenar múltiplos estados ativos
         self.estados_finais = set()
 
     def adicionar_transicao(self, origem, simbolo, destino):
+        """Adiciona uma transição ao autômato. Suporta transições em vazio usando uma string vazia ('') como símbolo."""
         self.estados.add(origem)
         self.estados.add(destino)
-        self.transicoes[(origem, simbolo)] = destino
+        if (origem, simbolo) not in self.transicoes:
+            self.transicoes[(origem, simbolo)] = set()
+        self.transicoes[(origem, simbolo)].add(destino)
 
     def definir_estado_inicial(self, estado):
-        self.estado_atual = estado
+        """Define o estado inicial do autômato."""
+        self.estados_ativos = self.fecho_epsilon(estado) 
+
+
 
     def definir_estados_finais(self, finais):
+        """Define os estados finais do autômato."""
         self.estados_finais = set(finais)
 
+    def fecho_epsilon(self, estados):
+        """Calcula o fecho-\(\varepsilon\) de um conjunto de estados."""
+        fecho = set(estados)
+        stack = list(estados)
+        while stack:
+            s = stack.pop()
+            # Verifica transições em vazio a partir do estado atual
+            for destino in self.transicoes.get((s, ''), []):
+                if destino not in fecho:
+                    fecho.add(destino)
+                    stack.append(destino)
+        return fecho
+
     def proximo_estado(self, simbolo):
-        if (self.estado_atual, simbolo) in self.transicoes:
-            self.estado_atual = self.transicoes[(self.estado_atual, simbolo)]
-            return self.estado_atual
-        return None
-    
+        """Tenta realizar uma transição com o símbolo atual ou uma transição em vazio."""
+        novos_estados = set()
+        
+        for estado in self.estados_ativos:
+            if (estado, simbolo) in self.transicoes:
+                novos_estados.update(self.transicoes[(estado, simbolo)])
+
+        # Calcula o fecho-\(\varepsilon\) dos novos estados
+        self.estados_ativos = self.fecho_epsilon(novos_estados)
+
     def salvar(self, nome_arquivo):
-        # Salva o autômato em um arquivo JSON
+        """Salva o autômato em um arquivo JSON."""
         dados = {
             'estados': list(self.estados),
-            'transicoes': {f"{origem},{simbolo}": destino for (origem, simbolo), destino in self.transicoes.items()},
-            'estado_atual': self.estado_atual,
+            'transicoes': {
+                f"{origem},{simbolo}": list(destinos)
+                for (origem, simbolo), destinos in self.transicoes.items()
+            },
+            'estados_ativos': list(self.estados_ativos),
             'estados_finais': list(self.estados_finais),
         }
         with open(nome_arquivo, 'w') as f:
             json.dump(dados, f, indent=4)
 
     def carregar(self, nome_arquivo):
-        # Carrega o autômato a partir de um arquivo JSON
+        """Carrega o autômato a partir de um arquivo JSON."""
         try:
             with open(nome_arquivo, 'r') as f:
                 dados = json.load(f)
                 
                 # Verifica se as chaves esperadas estão presentes
-                if 'estados' in dados and 'transicoes' in dados and 'estado_atual' in dados and 'estados_finais' in dados:
+                if 'estados' in dados and 'transicoes' in dados and 'estados_finais' in dados:
                     self.estados = set(dados['estados'])
                     self.transicoes = {
-                        (origem, simbolo): destino
-                        for transicao, destino in dados['transicoes'].items()
+                        (origem, simbolo): set(destinos)
+                        for transicao, destinos in dados['transicoes'].items()
                         for origem, simbolo in [transicao.split(',')]
                     }
-                    self.estado_atual = dados['estado_atual']
+                    self.estados_ativos = set(dados['estados_ativos'])
                     self.estados_finais = set(dados['estados_finais'])
                 else:
                     raise KeyError("Arquivo JSON inválido: chave(s) ausente(s).")
         except (json.JSONDecodeError, KeyError) as e:
             print(f"Erro ao carregar o autômato: {e}")
-
 
 class SimulatorApp(QWidget):
     def __init__(self):
@@ -173,99 +200,35 @@ class SimulatorApp(QWidget):
     def proximo_passo(self):
         if self.index < len(self.cadeia):
             simbolo = self.cadeia[self.index]
-            novo_estado = self.automato.proximo_estado(simbolo)
+            self.automato.proximo_estado(simbolo)
             self.index += 1
 
-            if novo_estado:
-                self.label.setText(f"Estado atual: {novo_estado}")
-                self.update()
+            if self.automato.estados_ativos:
+                self.label.setText(f"Estados ativos: {', '.join(self.automato.estados_ativos)}")
+                self.update()  # Atualiza a tela para chamar o paintEvent
             else:
                 self.label.setText("Cadeia rejeitada.")
                 self.timer.stop()
         else:
-            if self.automato.estado_atual in self.automato.estados_finais:
+            if self.automato.estados_ativos & self.automato.estados_finais:
                 self.label.setText("Cadeia aceita!")
             else:
                 self.label.setText("Cadeia rejeitada.")
-            self.timer.stop()
+        self.timer.stop()
+
+
     
     def salvar_projeto(self):
-        nome_arquivo, _ = QFileDialog.getSaveFileName(self, "Salvar Projeto", "", "Arquivos de Texto (*.txt)")
+        nome_arquivo, _ = QFileDialog.getSaveFileName(self, "Salvar Projeto", "", "Arquivos JSON (*.json)")
         if nome_arquivo:
-            with open(nome_arquivo, 'w') as f:
-                # Salvar estados
-                f.write("#states\n")
-                for estado in self.automato.estados:
-                    f.write(f"{estado}\n")
-                
-                # Salvar estado inicial
-                f.write("#initial\n")
-                f.write(f"{self.automato.estado_atual}\n")
-                
-                # Salvar estados finais
-                f.write("#accepting\n")
-                if self.automato.estados_finais:
-                    f.write("\n".join(self.automato.estados_finais) + "\n")
-                
-                # Salvar alfabeto
-                f.write("#alphabet\n")
-                alfabeto = {simbolo for (_, simbolo) in self.automato.transicoes.keys()}
-                for simbolo in alfabeto:
-                    f.write(f"{simbolo}\n")
-                
-                # Salvar transições
-                f.write("#transitions\n")
-                for (origem, simbolo), destino in self.automato.transicoes.items():
-                    f.write(f"{origem}:{simbolo}>{destino}\n")
+            self.automato.salvar(nome_arquivo)
 
     def carregar_projeto(self):
-        nome_arquivo, _ = QFileDialog.getOpenFileName(self, "Carregar Projeto", "", "Arquivos de Texto (*.txt)")
+        nome_arquivo, _ = QFileDialog.getOpenFileName(self, "Carregar Projeto", "", "Arquivos JSON (*.json)")
         if nome_arquivo:
-            try:
-                with open(nome_arquivo, 'r', encoding='utf-8') as f:
-                    lines = f.readlines()
-
-                    # Limpar espaços e quebras de linha extras
-                    lines = [line.strip() for line in lines if line.strip()]
-
-                    # Iniciar variáveis
-                    estados = set()
-                    transicoes = {}
-                    estado_inicial = None
-                    estados_finais = set()
-                    alfabeto = set()
-
-                    # Processar as linhas
-                    section = None
-                    for line in lines:
-                        if line.startswith("#"):
-                            section = line[1:].strip()  # Pega a seção após o #
-                        else:
-                            if section == "states":
-                                estados.add(line)
-                            elif section == "initial":
-                                estado_inicial = line
-                            elif section == "accepting":
-                                if line:
-                                    estados_finais.add(line)
-                            elif section == "alphabet":
-                                alfabeto.add(line)
-                            elif section == "transitions":
-                                origem, resto = line.split(":")
-                                simbolo, destino = resto.split(">")
-                                transicoes[(origem, simbolo)] = destino
-
-                    # Carregar no autômato
-                    self.automato.estados = estados
-                    self.automato.estado_atual = estado_inicial
-                    self.automato.estados_finais = estados_finais
-                    for (origem, simbolo), destino in transicoes.items():
-                        self.automato.adicionar_transicao(origem, simbolo, destino)
-
-                    self.atualizar_interface()
-
-            except Exception as e:
-                print(f"Erro ao carregar o autômato: {e}")
+            self.automato.carregar(nome_arquivo)
+            # Atualizar a interface após carregar o projeto
+            self.atualizar_interface()
 
     def atualizar_interface(self):
         self.input_estado_inicial.setText(self.automato.estado_atual if self.automato.estado_atual else "")
@@ -275,18 +238,19 @@ class SimulatorApp(QWidget):
         self.input_transicao_destino.clear()
         self.input_cadeia.clear()
 
-    def paintEvent(self, event):
-        qp = QPainter()
-        qp.begin(self)
+def paintEvent(self, event):
+    qp = QPainter()
+    qp.begin(self)
 
-        qp.setFont(QFont("Arial", 10))
-        center_x, center_y = 400, 300  # Centro do círculo
-        radius = 200  # Raio do círculo
+    qp.setFont(QFont("Arial", 10))
+    center_x, center_y = 400, 300  # Centro do círculo
+    radius = 200  # Raio do círculo
 
+    num_estados = len(self.automato.estados)
+    if num_estados > 0:
         # Distribuir estados em um círculo
         estados_pos = {}
-        num_estados = len(self.automato.estados)
-        angle_step = 2 * math.pi / num_estados if num_estados > 0 else 0
+        angle_step = 2 * math.pi / num_estados
         for i, estado in enumerate(self.automato.estados):
             angle = i * angle_step
             x = center_x + radius * math.cos(angle)
@@ -295,36 +259,43 @@ class SimulatorApp(QWidget):
 
         # Desenhar estados
         for estado, pos in estados_pos.items():
-            if estado == self.automato.estado_atual:
-                qp.setBrush(Qt.green)  # Estado atual em verde
+            if estado in self.automato.estados_ativos:
+                qp.setBrush(Qt.green)  # Estados ativos em verde
             elif estado in self.automato.estados_finais:
                 qp.setBrush(Qt.red)  # Estado final em vermelho
             else:
                 qp.setBrush(Qt.white)  # Outros estados em branco
             qp.drawEllipse(pos, 20, 20)
-            qp.drawText(int(pos.x()), int(pos.y()), estado)  # Converte para int
+            qp.drawText(int(pos.x()) - 10, int(pos.y()) - 10, estado)  # Ajuste para centralizar o texto
 
         # Desenhar transições
         curve_count = {}
-        for (origem, simbolo), destino in self.automato.transicoes.items():
+        for (origem, simbolo), destinos in self.automato.transicoes.items():
             origem_pos = estados_pos[origem]
-            destino_pos = estados_pos[destino]
-            qp.drawLine(origem_pos, destino_pos)
+            for destino in destinos:
+                destino_pos = estados_pos[destino]
+                qp.drawLine(origem_pos, destino_pos)
 
-            # Calcular o ponto médio para a curva
-            mid_x = (origem_pos.x() + destino_pos.x()) / 2
-            mid_y = (origem_pos.y() + destino_pos.y()) / 2
+                # Calcular o ponto médio para a curva
+                mid_x = (origem_pos.x() + destino_pos.x()) / 2
+                mid_y = (origem_pos.y() + destino_pos.y()) / 2
 
-            # Desenhar a curva
-            if (origem, destino) not in curve_count:
-                curve_count[(origem, destino)] = 0
-            curve_count[(origem, destino)] += 1
+                # Desenhar a curva
+                if (origem, destino) not in curve_count:
+                    curve_count[(origem, destino)] = 0
+                curve_count[(origem, destino)] += 1
 
-            # Adicionar um deslocamento vertical para cada curva entre os mesmos estados
-            offset = (curve_count[(origem, destino)] - 1) * 10
-            qp.drawText(int(mid_x), int(mid_y + offset), simbolo)  # Converte para int
+                # Adicionar um deslocamento vertical para cada curva entre os mesmos estados
+                offset = (curve_count[(origem, destino)] - 1) * 10
+                qp.drawText(int(mid_x), int(mid_y + offset), simbolo)  # Ajusta a posição do texto
+    else:
+        qp.setBrush(Qt.black)
+        qp.drawText(center_x, center_y, "Nenhum estado para mostrar!")
 
-        qp.end()
+    qp.end()
+
+
+
 
 
 if __name__ == "__main__":
@@ -332,3 +303,4 @@ if __name__ == "__main__":
     window = SimulatorApp()
     window.show()
     sys.exit(app.exec_())
+

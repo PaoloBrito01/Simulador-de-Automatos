@@ -1,0 +1,17 @@
+{
+    "estados": [
+        "S0",
+        "S1",
+        "S2",
+        "S3"
+    ],
+    "transicoes": {
+        "S0,A": "S1",
+        "S1,B": "S2",
+        "S2,C": "S3"
+    },
+    "estado_atual": "S3",
+    "estados_finais": [
+        "S3"
+    ]
+}

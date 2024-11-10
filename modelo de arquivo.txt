@@ -1,0 +1,9 @@
+#states
+s0
+s1
+#initial
+#accepting
+#alphabet
+a
+#transitions
+s0:a>s1
