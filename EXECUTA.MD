@@ -26,5 +26,5 @@ python3 run.py
 ### Onde encontrar os autômatos salvos 
 -   Todos os arquivos de grafos estão na pasta Simulador_Automatos.
 -   Arquivos com autômatos pré-definidos estão dentro da pasta `./Simulador_Automatos/prontos`
-
+- Teste
 
