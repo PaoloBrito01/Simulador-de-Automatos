@@ -191,6 +191,9 @@ class SimulatorApp(QWidget):
     
     def salvar_projeto(self):
         nome_arquivo, _ = QFileDialog.getSaveFileName(self, "Salvar Projeto", "", "Arquivos de Texto (*.txt)")
+        if not nome_arquivo.endswith(".txt"):
+            nome_arquivo += ".txt"
+        
         if nome_arquivo:
             with open(nome_arquivo, 'w') as f:
                 # Salvar estados
