@@ -2,7 +2,6 @@ import sys
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QPushButton, QVBoxLayout, QLineEdit, QHBoxLayout, QFileDialog
 from PyQt5.QtCore import QTimer, Qt, QPointF
 from PyQt5.QtGui import QPainter, QFont
-import json
 import math
 
 class Automato:
