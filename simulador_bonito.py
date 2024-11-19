@@ -303,26 +303,36 @@ class SimulatorApp(QWidget):
                 qp.setBrush(Qt.white)  # Outros estados em branco
             qp.drawEllipse(pos, 20, 20)
             qp.drawText(int(pos.x()), int(pos.y()), estado)  # Converte para int
-
-        # Desenhar transições
-        curve_count = {}
+        
+        # Desenhar transições com setas
         for (origem, simbolo), destino in self.automato.transicoes.items():
             origem_pos = estados_pos[origem]
             destino_pos = estados_pos[destino]
-            qp.drawLine(origem_pos, destino_pos)
+            line = QPointF(destino_pos.x() - origem_pos.x(), destino_pos.y() - origem_pos.y())
+            angle = math.atan2(line.y(), line.x())
+            
+            # Ponto inicial e final da linha, ajustados para evitar sobreposição com o círculo do estado
+            start_x = origem_pos.x() + 20 * math.cos(angle)
+            start_y = origem_pos.y() + 20 * math.sin(angle)
+            end_x = destino_pos.x() - 20 * math.cos(angle)
+            end_y = destino_pos.y() - 20 * math.sin(angle)
+            
+            qp.drawLine(QPointF(start_x, start_y), QPointF(end_x, end_y))
+            
+            # Desenhar seta
+            arrow_size = 10
+            arrow_angle = math.pi / 6
+            arrow_x1 = end_x - arrow_size * math.cos(angle - arrow_angle)
+            arrow_y1 = end_y - arrow_size * math.sin(angle - arrow_angle)
+            arrow_x2 = end_x - arrow_size * math.cos(angle + arrow_angle)
+            arrow_y2 = end_y - arrow_size * math.sin(angle + arrow_angle)
+            qp.drawPolygon(QPointF(end_x, end_y), QPointF(arrow_x1, arrow_y1), QPointF(arrow_x2, arrow_y2))
 
-            # Calcular o ponto médio para a curva
-            mid_x = (origem_pos.x() + destino_pos.x()) / 2
-            mid_y = (origem_pos.y() + destino_pos.y()) / 2
+            # Desenhar símbolo próximo ao meio da linha
+            mid_x = (start_x + end_x) / 2
+            mid_y = (start_y + end_y) / 2
+            qp.drawText(int(mid_x), int(mid_y), simbolo)
 
-            # Desenhar a curva
-            if (origem, destino) not in curve_count:
-                curve_count[(origem, destino)] = 0
-            curve_count[(origem, destino)] += 1
-
-            # Adicionar um deslocamento vertical para cada curva entre os mesmos estados
-            offset = (curve_count[(origem, destino)] - 1) * 10
-            qp.drawText(int(mid_x), int(mid_y + offset), simbolo)  # Converte para int
 
         qp.end()
 
@@ -332,43 +342,3 @@ if __name__ == "__main__":
     window = SimulatorApp()
     window.show()
     sys.exit(app.exec_())
-
-
-
-
-
-
-
-
-
-
-
-# Desenhar transições com setas
-for (origem, simbolo), destino in self.automato.transicoes.items():
-    origem_pos = estados_pos[origem]
-    destino_pos = estados_pos[destino]
-    line = QPointF(destino_pos.x() - origem_pos.x(), destino_pos.y() - origem_pos.y())
-    angle = math.atan2(line.y(), line.x())
-    
-    # Ponto inicial e final da linha, ajustados para evitar sobreposição com o círculo do estado
-    start_x = origem_pos.x() + 20 * math.cos(angle)
-    start_y = origem_pos.y() + 20 * math.sin(angle)
-    end_x = destino_pos.x() - 20 * math.cos(angle)
-    end_y = destino_pos.y() - 20 * math.sin(angle)
-    
-    qp.drawLine(QPointF(start_x, start_y), QPointF(end_x, end_y))
-    
-    # Desenhar seta
-    arrow_size = 10
-    arrow_angle = math.pi / 6
-    arrow_x1 = end_x - arrow_size * math.cos(angle - arrow_angle)
-    arrow_y1 = end_y - arrow_size * math.sin(angle - arrow_angle)
-    arrow_x2 = end_x - arrow_size * math.cos(angle + arrow_angle)
-    arrow_y2 = end_y - arrow_size * math.sin(angle + arrow_angle)
-    qp.drawPolygon(QPointF(end_x, end_y), QPointF(arrow_x1, arrow_y1), QPointF(arrow_x2, arrow_y2))
-
-    # Desenhar símbolo próximo ao meio da linha
-    mid_x = (start_x + end_x) / 2
-    mid_y = (start_y + end_y) / 2
-    qp.drawText(int(mid_x), int(mid_y), simbolo)
-
