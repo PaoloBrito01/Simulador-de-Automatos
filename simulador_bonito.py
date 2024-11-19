@@ -28,39 +28,6 @@ class Automato:
             self.estado_atual = self.transicoes[(self.estado_atual, simbolo)]
             return self.estado_atual
         return None
-    
-    def salvar(self, nome_arquivo):
-        # Salva o autômato em um arquivo JSON
-        dados = {
-            'estados': list(self.estados),
-            'transicoes': {f"{origem},{simbolo}": destino for (origem, simbolo), destino in self.transicoes.items()},
-            'estado_atual': self.estado_atual,
-            'estados_finais': list(self.estados_finais),
-        }
-        with open(nome_arquivo, 'w') as f:
-            json.dump(dados, f, indent=4)
-
-    def carregar(self, nome_arquivo):
-        # Carrega o autômato a partir de um arquivo JSON
-        try:
-            with open(nome_arquivo, 'r') as f:
-                dados = json.load(f)
-                
-                # Verifica se as chaves esperadas estão presentes
-                if 'estados' in dados and 'transicoes' in dados and 'estado_atual' in dados and 'estados_finais' in dados:
-                    self.estados = set(dados['estados'])
-                    self.transicoes = {
-                        (origem, simbolo): destino
-                        for transicao, destino in dados['transicoes'].items()
-                        for origem, simbolo in [transicao.split(',')]
-                    }
-                    self.estado_atual = dados['estado_atual']
-                    self.estados_finais = set(dados['estados_finais'])
-                else:
-                    raise KeyError("Arquivo JSON inválido: chave(s) ausente(s).")
-        except (json.JSONDecodeError, KeyError) as e:
-            print(f"Erro ao carregar o autômato: {e}")
-
 
 class SimulatorApp(QWidget):
     def __init__(self):
