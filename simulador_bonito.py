@@ -8,13 +8,16 @@ class Automato:
     def __init__(self):
         self.estados = set()
         self.transicoes = {}
-        self.estado_atual = None
+        self.estados_atuais = set()
         self.estados_finais = set()
 
     def adicionar_transicao(self, origem, simbolo, destino):
         self.estados.add(origem)
         self.estados.add(destino)
-        self.transicoes[(origem, simbolo)] = destino
+        if (origem, simbolo) not in self.transicoes:
+            self.transicoes[(origem, simbolo)] = set()
+        self.transicoes[(origem, simbolo)].add(destino)
+
 
     def definir_estado_inicial(self, estado):
         self.estado_atual = estado
@@ -22,11 +25,14 @@ class Automato:
     def definir_estados_finais(self, finais):
         self.estados_finais = set(finais)
 
-    def proximo_estado(self, simbolo):
-        if (self.estado_atual, simbolo) in self.transicoes:
-            self.estado_atual = self.transicoes[(self.estado_atual, simbolo)]
-            return self.estado_atual
-        return None
+    def proximo_estado(self, estados_atuais, simbolo):
+        proximos_estados = set()
+        for estado in estados_atuais:
+            if (estado, simbolo) in self.transicoes:
+                proximos_estados.update(self.transicoes[(estado, simbolo)])
+        return proximos_estados
+
+
 
 class SimulatorApp(QWidget):
     def __init__(self):
@@ -104,6 +110,31 @@ class SimulatorApp(QWidget):
         self.automato = Automato()
         self.cadeia = ""
         self.index = 0
+    def desenhar_transicao(self, qp, origem_pos, destino_pos, simbolo):
+            line = QPointF(destino_pos.x() - origem_pos.x(), destino_pos.y() - origem_pos.y())
+            angle = math.atan2(line.y(), line.x())
+
+            # Ajustar coordenadas
+            start_x = origem_pos.x() + 20 * math.cos(angle)
+            start_y = origem_pos.y() + 20 * math.sin(angle)
+            end_x = destino_pos.x() - 20 * math.cos(angle)
+            end_y = destino_pos.y() - 20 * math.sin(angle)
+
+            # Linha e seta
+            qp.drawLine(QPointF(start_x, start_y), QPointF(end_x, end_y))
+            arrow_size = 10
+            arrow_angle = math.pi / 6
+            arrow_x1 = end_x - arrow_size * math.cos(angle - arrow_angle)
+            arrow_y1 = end_y - arrow_size * math.sin(angle - arrow_angle)
+            arrow_x2 = end_x - arrow_size * math.cos(angle + arrow_angle)
+            arrow_y2 = end_y - arrow_size * math.sin(angle + arrow_angle)
+            qp.drawPolygon(QPointF(end_x, end_y), QPointF(arrow_x1, arrow_y1), QPointF(arrow_x2, arrow_y2))
+
+            # Símbolo no meio
+            mid_x = (start_x + end_x) / 2
+            mid_y = (start_y + end_y) / 2
+            qp.drawText(int(mid_x), int(mid_y), simbolo)
+
 
     def adicionar_transicao(self):
         origem = self.input_transicao_origem.text()
@@ -120,15 +151,12 @@ class SimulatorApp(QWidget):
         estado_inicial = self.input_estado_inicial.text()
         estados_finais = self.input_estados_finais.text().split(',')
 
-        # Configurações iniciais
         if estado_inicial:
             self.automato.definir_estado_inicial(estado_inicial)
+            self.automato.estados_atuais = {estado_inicial}
         self.automato.definir_estados_finais(estados_finais)
-        
-        # Obter a cadeia do campo de entrada
+
         self.cadeia = self.input_cadeia.text()
-        
-        # Resetar o índice e iniciar a simulação
         if self.cadeia:
             self.index = 0
             self.label.setText("Simulação em andamento...")
@@ -136,24 +164,27 @@ class SimulatorApp(QWidget):
         else:
             self.label.setText("Por favor, insira uma cadeia válida.")
 
+
     def proximo_passo(self):
         if self.index < len(self.cadeia):
             simbolo = self.cadeia[self.index]
-            novo_estado = self.automato.proximo_estado(simbolo)
+            novos_estados = self.automato.proximo_estado(self.automato.estados_atuais, simbolo)
             self.index += 1
 
-            if novo_estado:
-                self.label.setText(f"Estado atual: {novo_estado}")
+            if novos_estados:
+                self.automato.estados_atuais = novos_estados
+                self.label.setText(f"Estados atuais: {', '.join(novos_estados)}")
                 self.update()
             else:
                 self.label.setText("Cadeia rejeitada.")
                 self.timer.stop()
         else:
-            if self.automato.estado_atual in self.automato.estados_finais:
+            if self.automato.estados_atuais & self.automato.estados_finais:
                 self.label.setText("Cadeia aceita!")
             else:
                 self.label.setText("Cadeia rejeitada.")
             self.timer.stop()
+
     
     def salvar_projeto(self):
         nome_arquivo, _ = QFileDialog.getSaveFileName(self, "Salvar Projeto", "", "Arquivos de Texto (*.txt)")
@@ -264,7 +295,7 @@ class SimulatorApp(QWidget):
 
         # Desenhar estados
         for estado, pos in estados_pos.items():
-            if estado == self.automato.estado_atual:
+            if estado in self.automato.estados_atuais:
                 qp.setBrush(Qt.green)  # Estado atual em verde
             elif estado in self.automato.estados_finais:
                 qp.setBrush(Qt.red)  # Estado final em vermelho
@@ -276,7 +307,15 @@ class SimulatorApp(QWidget):
         # Desenhar transições com setas
         for (origem, simbolo), destino in self.automato.transicoes.items():
             origem_pos = estados_pos[origem]
-            destino_pos = estados_pos[destino]
+            if isinstance(destino, set):
+                for d in destino:  # Itera sobre múltiplos destinos
+                    if d in estados_pos:
+                        destino_pos = estados_pos[d]
+                        self.desenhar_transicao(qp, origem_pos, destino_pos, simbolo)
+            else:
+                if destino in estados_pos:
+                    destino_pos = estados_pos[destino]
+                    self.desenhar_transicao(qp, origem_pos, destino_pos, simbolo)
             line = QPointF(destino_pos.x() - origem_pos.x(), destino_pos.y() - origem_pos.y())
             angle = math.atan2(line.y(), line.x())
             
