@@ -1,0 +1,322 @@
+from PyQt5.QtWidgets import (
+    QFileDialog, QCheckBox, QLineEdit, QPushButton, QVBoxLayout, 
+    QHBoxLayout, QLabel, QWidget, QApplication
+)
+from PyQt5.QtCore import Qt, QPointF, QTimer
+from PyQt5.QtGui import QPainter, QFont
+import math
+
+
+class Automato:
+    def __init__(self, tipo="AFD"):
+        self.estados = set()
+        self.transicoes = {}
+        self.estado_atual = None
+        self.estados_finais = set()
+        self.estado_inicial = None
+        self.tipo = tipo
+
+    def adicionar_transicao(self, origem, simbolo, destino):
+        """Adiciona uma transição ao autômato."""
+        self.estados.update([origem, destino])
+        chave = (origem, simbolo)
+        if self.tipo == "AFD":
+            if chave in self.transicoes:
+                raise ValueError(f"Transição duplicada para {origem} com símbolo '{simbolo}' no AFD.")
+            self.transicoes[chave] = destino
+        elif self.tipo == "AFN":
+            if chave not in self.transicoes:
+                self.transicoes[chave] = set()
+            self.transicoes[chave].add(destino)
+
+    def definir_estado_inicial(self, estado):
+        """Define o estado inicial do autômato."""
+        if estado in self.estados:
+            self.estado_inicial = estado
+            self.estado_atual = estado
+        else:
+            raise ValueError(f"Estado inicial '{estado}' não existe.")
+
+    def definir_estados_finais(self, finais):
+        """Define os estados finais do autômato."""
+        self.estados_finais = {estado for estado in finais if estado in self.estados}
+
+    def processar_simbolo(self, simbolo):
+        """Processa um símbolo na cadeia, movendo para o próximo estado."""
+        chave = (self.estado_atual, simbolo)
+        if self.tipo == "AFD":
+            if chave in self.transicoes:
+                self.estado_atual = self.transicoes[chave]
+                return True
+            return False
+        elif self.tipo == "AFN":
+            if chave in self.transicoes:
+                self.estado_atual = next(iter(self.transicoes[chave]))
+                return True
+            return False
+
+
+class SimulatorApp(QWidget):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Simulador de Autômatos")
+        self.setGeometry(100, 100, 800, 600)
+        self.automato = Automato()
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.atualizar_simulacao)
+        self.cadeia = ""
+        self.index = 0
+        self.init_ui()
+
+    def init_ui(self):
+        """Inicializa a interface gráfica."""
+        # Elementos de controle
+        self.tipo_automato_label = QLabel("Tipo de Autômato:")
+        self.afd_checkbox = QCheckBox("AFD", self)
+        self.afn_checkbox = QCheckBox("AFN", self)
+        self.afd_checkbox.setChecked(True)
+        self.afd_checkbox.stateChanged.connect(self.atualizar_tipo_automato)
+        self.afn_checkbox.stateChanged.connect(self.atualizar_tipo_automato)
+
+        # Configuração do autômato
+        self.input_estado_inicial = QLineEdit(self)
+        self.input_estado_inicial.setPlaceholderText("Estado Inicial")
+        self.input_estados_finais = QLineEdit(self)
+        self.input_estados_finais.setPlaceholderText("Estados Finais (separados por vírgula)")
+        self.input_transicao_origem = QLineEdit(self)
+        self.input_transicao_origem.setPlaceholderText("Estado de Origem")
+        self.input_transicao_simbolo = QLineEdit(self)
+        self.input_transicao_simbolo.setPlaceholderText("Símbolo")
+        self.input_transicao_destino = QLineEdit(self)
+        self.input_transicao_destino.setPlaceholderText("Estado de Destino")
+        self.botao_adicionar_transicao = QPushButton("Adicionar Transição", self)
+        self.botao_adicionar_transicao.clicked.connect(self.adicionar_transicao)
+
+        # Simulação
+        self.input_cadeia = QLineEdit(self)
+        self.input_cadeia.setPlaceholderText("Digite a cadeia para simulação")
+        self.botao_iniciar = QPushButton("Iniciar Simulação", self)
+        self.botao_iniciar.clicked.connect(self.iniciar_simulacao)
+
+        # Botões de salvar/carregar
+        self.botao_salvar = QPushButton("Salvar Projeto", self)
+        self.botao_salvar.clicked.connect(self.salvar_projeto)
+        self.botao_carregar = QPushButton("Carregar Projeto", self)
+        self.botao_carregar.clicked.connect(self.carregar_projeto)
+
+        # Label de mensagens
+        self.label = QLabel("", self)
+
+        # Layouts
+        layout = QVBoxLayout()
+        tipo_layout = QHBoxLayout()
+        tipo_layout.addWidget(self.afd_checkbox)
+        tipo_layout.addWidget(self.afn_checkbox)
+
+        layout.addWidget(self.tipo_automato_label)
+        layout.addLayout(tipo_layout)
+        layout.addWidget(self.input_estado_inicial)
+        layout.addWidget(self.input_estados_finais)
+        layout.addWidget(self.input_transicao_origem)
+        layout.addWidget(self.input_transicao_simbolo)
+        layout.addWidget(self.input_transicao_destino)
+        layout.addWidget(self.botao_adicionar_transicao)
+        layout.addWidget(self.input_cadeia)
+        layout.addWidget(self.botao_iniciar)
+        layout.addWidget(self.botao_salvar)
+        layout.addWidget(self.botao_carregar)
+        layout.addWidget(self.label)
+
+        self.setLayout(layout)
+
+    def atualizar_tipo_automato(self):
+        """Atualiza o tipo de autômato baseado na seleção do usuário."""
+        self.automato.tipo = "AFD" if self.afd_checkbox.isChecked() else "AFN"
+
+    def adicionar_transicao(self):
+        origem = self.input_transicao_origem.text().strip()
+        simbolo = self.input_transicao_simbolo.text().strip()
+        destino = self.input_transicao_destino.text().strip()
+
+        # Verificar se todos os campos foram preenchidos
+        if not origem or not simbolo or not destino:
+            self.label.setText("Por favor, preencha todos os campos da transição.")
+            return
+
+        try:
+            # Tenta adicionar a transição no autômato
+            self.automato.adicionar_transicao(origem, simbolo, destino)
+            self.label.setText(f"Transição adicionada: {origem} --{simbolo}--> {destino}")
+        except ValueError as e:
+            # Captura o erro de valor e exibe a mensagem
+            self.label.setText(f"Erro: {e}")
+
+
+    def iniciar_simulacao(self):
+        """Inicia a simulação da cadeia."""
+        estado_inicial = self.input_estado_inicial.text().strip()
+        estados_finais = {e.strip() for e in self.input_estados_finais.text().split(",") if e.strip()}
+
+        try:
+            self.automato.definir_estado_inicial(estado_inicial)
+            self.automato.definir_estados_finais(estados_finais)
+        except ValueError as e:
+            self.label.setText(f"Erro: {e}")
+            return
+
+        self.cadeia = self.input_cadeia.text().strip()
+        if not self.cadeia:
+            self.label.setText("Erro: Insira uma cadeia para simulação.")
+            return
+
+        self.index = 0
+        self.timer.start(1000)
+        self.label.setText("Simulação iniciada...")
+
+    def atualizar_simulacao(self):
+        """Atualiza a simulação em cada passo."""
+        if self.index < len(self.cadeia):
+            simbolo = self.cadeia[self.index]
+            if not self.automato.processar_simbolo(simbolo):
+                self.label.setText(f"Erro: Cadeia rejeitada no símbolo '{simbolo}'.")
+                self.timer.stop()
+                return
+            self.index += 1
+            self.label.setText(f"Processando símbolo: {simbolo}")
+        else:
+            if self.automato.estado_atual in self.automato.estados_finais:
+                self.label.setText("Simulação concluída: Cadeia aceita!")
+            else:
+                self.label.setText("Simulação concluída: Cadeia rejeitada.")
+            self.timer.stop()
+
+    def salvar_projeto(self):
+        """Salva a configuração do autômato em um arquivo."""
+        nome_arquivo, _ = QFileDialog.getSaveFileName(self, "Salvar Projeto", "", "Arquivos de Texto (*.txt)")
+        if nome_arquivo:
+            if not nome_arquivo.endswith(".txt"):
+                nome_arquivo += ".txt"
+            try:
+                with open(nome_arquivo, 'w') as f:
+                    f.write("#states\n")
+                    for estado in self.automato.estados:
+                        f.write(f"{estado}\n")
+                    f.write("#initial\n")
+                    f.write(f"{self.automato.estado_inicial}\n")
+                    f.write("#accepting\n")
+                    for estado in self.automato.estados_finais:
+                        f.write(f"{estado}\n")
+                    f.write("#transitions\n")
+                    for (origem, simbolo), destinos in self.automato.transicoes.items():
+                        for destino in destinos:
+                            f.write(f"{origem}:{simbolo}>{destino}\n")
+                self.label.setText(f"Projeto salvo em {nome_arquivo}.")
+            except Exception as e:
+                self.label.setText(f"Erro ao salvar o projeto: {e}")
+
+    def carregar_projeto(self):
+        """Carrega a configuração do autômato de um arquivo."""
+        nome_arquivo, _ = QFileDialog.getOpenFileName(self, "Carregar Projeto", "", "Arquivos de Texto (*.txt)")
+        if nome_arquivo:
+            try:
+                with open(nome_arquivo, 'r') as f:
+                    linhas = f.readlines()
+
+                estados = set()
+                estados_finais = set()
+                transicoes = {}
+
+                # Leitura dos estados
+                lendo = None
+                for linha in linhas:
+                    linha = linha.strip()
+                    if linha == "#states":
+                        lendo = "states"
+                    elif linha == "#initial":
+                        lendo = "initial"
+                    elif linha == "#accepting":
+                        lendo = "accepting"
+                    elif linha == "#alphabet":
+                        lendo = "alphabet"
+                    elif linha == "#transitions":
+                        lendo = "transitions"
+                    elif lendo == "states" and linha:
+                        estados.add(linha)
+                    elif lendo == "initial" and linha:
+                        estado_inicial = linha  # Armazenar o estado inicial temporariamente
+                    elif lendo == "accepting" and linha:
+                        estados_finais.add(linha)
+                    elif lendo == "transitions" and linha:
+                        origem, resto = linha.split(":", 1)
+                        simbolo, destino = resto.split(">", 1)
+                        if (origem, simbolo) not in transicoes:
+                            transicoes[(origem, simbolo)] = set()
+                        transicoes[(origem, simbolo)].add(destino)
+
+                # Após carregar todos os estados, defina o estado inicial
+                self.automato.estados = estados
+                self.automato.estado_inicial = estado_inicial  # Agora podemos definir o estado inicial
+                self.automato.estados_finais = estados_finais
+                self.automato.transicoes = transicoes
+                self.label.setText("Projeto carregado com sucesso.")
+            except Exception as e:
+                self.label.setText(f"Erro ao carregar o projeto: {e}")
+
+    def paintEvent(self, event):
+        """Desenha o autômato na tela."""
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.Antialiasing)
+        painter.setPen(Qt.black)
+        painter.setBrush(Qt.white)
+        font = QFont("Arial", 12)
+        painter.setFont(font)
+
+        # Desenha os estados
+        for estado in self.automato.estados:
+            self.desenhar_estado(painter, estado)
+
+        # Desenha as transições
+        for (origem, simbolo), destinos in self.automato.transicoes.items():
+            for destino in destinos:
+                self.desenhar_transicao(painter, origem, simbolo, destino)
+
+    def desenhar_estado(self, painter, estado):
+        """Desenha um estado no gráfico."""
+        x, y = self.calcular_posicao_estado(estado)
+        radius = 40
+        painter.drawEllipse(QPointF(x - radius, y - radius), radius * 2, radius * 2)
+        painter.drawText(QPointF(x - radius / 2, y), estado)
+
+    def desenhar_transicao(self, painter, origem, simbolo, destino):
+        """Desenha uma transição entre dois estados."""
+        origem_x, origem_y = self.calcular_posicao_estado(origem)
+        destino_x, destino_y = self.calcular_posicao_estado(destino)
+        painter.drawLine(int(origem_x), int(origem_y), int(destino_x), int(destino_y))
+        mid_x = (origem_x + destino_x) / 2
+        mid_y = (origem_y + destino_y) / 2
+        painter.drawText(QPointF(mid_x, mid_y), simbolo)
+
+    def calcular_posicao_estado(self, estado):
+        """Calcula a posição do estado na tela (exemplo com layout circular)."""
+        if estado not in self.automato.estados:
+            raise ValueError(f"Estado '{estado}' não encontrado na lista de estados.")
+
+        num_estados = len(self.automato.estados)
+        estados_ordenados = sorted(self.automato.estados)
+        angulo = 2 * math.pi * estados_ordenados.index(estado) / num_estados
+        raio = 200  # Raio do círculo
+        centro_x = self.width() / 2
+        centro_y = self.height() / 2
+        x = centro_x + raio * math.cos(angulo)
+        y = centro_y + raio * math.sin(angulo)
+        return x, y
+
+
+
+
+
+if __name__ == "__main__":
+    app = QApplication([])
+    window = SimulatorApp()
+    window.show()
+    app.exec_()
